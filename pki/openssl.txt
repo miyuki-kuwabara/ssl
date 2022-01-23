@@ -1,0 +1,108 @@
+export MSYS_NO_PATHCONV=1
+mkdir configs
+mkdir crl
+mkdir RootCA
+mkdir InterCA
+mkdir Server
+mkdir Client
+
+cat <<'EOF' > ./configs/openssl_sign.cnf
+[ ca ]
+default_ca      = CA_default
+
+[ CA_default ]
+dir             = ./
+certs           = $dir/certs
+crl_dir         = $dir/crl
+database        = $dir/index.txt
+new_certs_dir   = $dir/newcerts
+serial          = $dir/serial
+crlnumber       = $dir/crlnumber
+crl             = $dir/crl.pem
+RANDFILE        = $dir/.rand
+
+name_opt        = ca_default
+cert_opt        = ca_default
+
+default_days    = 365
+default_crl_days= 30
+default_bits    = 2048
+default_md      = sha256
+preserve        = no
+policy          = policy_match
+
+[ policy_match ]
+countryName             = match
+stateOrProvinceName     = match
+organizationName        = match
+organizationalUnitName  = optional
+commonName              = supplied
+emailAddress            = optional
+
+[ v3_ca ]
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid:always,issuer
+basicConstraints=CA:true
+keyUsage = cRLSign,keyCertSign
+
+[ v3_server ]
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid,issuer
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+crlDistributionPoints = URI:http://192.168.0.3/crl/example.net.crl
+subjectAltName = DNS:*.example.com, IP:127.0.0.1, IP:192.168.0.3
+
+[ v3_client ]
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid,issuer
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = clientAuth
+crlDistributionPoints = URI:http://192.168.0.3/crl/example.net.crl
+EOF
+
+cd RootCA
+mkdir newcerts
+echo "01" > serial
+echo "00" > crlnumber
+touch index.txt
+
+openssl genrsa -out root-ca-key.pem -aes256 -passout pass:rootcaprivkeypass 2048
+openssl req  -new -out root-ca-csr.pem -key root-ca-key.pem -passin pass:rootcaprivkeypass -subj "/C=JP/ST=Osaka/O=EXAMPLE/CN=EXAMPLE Root CA"
+openssl ca -config ../configs/openssl_sign.cnf -out root-ca-crt.pem -in root-ca-csr.pem -selfsign -keyfile root-ca-key.pem -passin pass:rootcaprivkeypass -batch -extensions v3_ca
+openssl x509 -in root-ca-crt.pem -out root-ca-crt.cer
+
+
+cd ../InterCA
+mkdir newcerts
+echo "01" > serial
+echo "00" > crlnumber
+touch index.txt
+
+openssl genrsa -out inter-ca-key.pem -aes256 -passout pass:intercaprivkeypass 2048
+openssl req  -new -out inter-ca-csr.pem -key inter-ca-key.pem -passin pass:intercaprivkeypass -subj "/C=JP/ST=Osaka/O=EXAMPLE/CN=EXAMPLE Intermediate CA"
+cd ../RootCA
+openssl ca -config ../configs/openssl_sign.cnf -out ../InterCA/inter-ca-crt.pem -in ../InterCA/inter-ca-csr.pem -cert root-ca-crt.pem -keyfile root-ca-key.pem -passin pass:rootcaprivkeypass -batch -extensions v3_ca
+cd ../InterCA
+openssl x509 -in inter-ca-crt.pem -out inter-ca-crt.cer
+
+cd ../Server
+mkdir newcerts
+echo "01" > serial
+echo "00" > crlnumber
+touch index.txt
+
+openssl genrsa -out server-key.pem -aes256 -passout pass:serverprivkeypass 2048
+openssl req  -new -out server-csr.pem -key server-key.pem -passin pass:serverprivkeypass -subj "/C=JP/ST=Osaka/O=EXAMPLE/CN=example.com"
+cd ../InterCA
+openssl ca -config ../configs/openssl_sign.cnf -out ../Server/server-crt.pem -in ../Server/server-csr.pem -cert inter-ca-crt.pem -keyfile inter-ca-key.pem -passin pass:intercaprivkeypass -batch -extensions v3_server
+cd ../Server
+openssl x509 -in server-crt.pem -out server-crt.cer
+
+openssl pkcs12 -export -inkey server-key.pem -in server-crt.cer -out server-crt.pfx -passin pass:serverprivkeypass -passout pass:
+openssl pkcs12 -export -inkey server-key.pem -in server-crt.cer -out server-crt2.pfx -passin pass:serverprivkeypass -passout pass:serverpfxpass
+
+openssl x509 -outform der -in server-crt.pem -out server-crt.der
+openssl rsa -outform der -in server-key.pem -out server-key.der -passin pass:serverprivkeypass

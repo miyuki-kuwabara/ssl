@@ -1,0 +1,54 @@
+[ ca ]
+default_ca      = CA_default
+
+[ CA_default ]
+dir             = ./
+certs           = $dir/certs
+crl_dir         = $dir/crl
+database        = $dir/index.txt
+new_certs_dir   = $dir/newcerts
+serial          = $dir/serial
+crlnumber       = $dir/crlnumber
+crl             = $dir/crl.pem
+RANDFILE        = $dir/.rand
+
+name_opt        = ca_default
+cert_opt        = ca_default
+
+default_days    = 365
+default_crl_days= 30
+default_bits    = 2048
+default_md      = sha256
+preserve        = no
+policy          = policy_match
+
+[ policy_match ]
+countryName             = match
+stateOrProvinceName     = match
+organizationName        = match
+organizationalUnitName  = optional
+commonName              = supplied
+emailAddress            = optional
+
+[ v3_ca ]
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid:always,issuer
+basicConstraints=CA:true
+keyUsage = cRLSign,keyCertSign
+
+[ v3_server ]
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid,issuer
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+crlDistributionPoints = URI:http://192.168.0.3/crl/example.net.crl
+subjectAltName = DNS:*.example.com, IP:127.0.0.1, IP:192.168.0.3
+
+[ v3_client ]
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid,issuer
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = clientAuth
+crlDistributionPoints = URI:http://192.168.0.3/crl/example.net.crl
